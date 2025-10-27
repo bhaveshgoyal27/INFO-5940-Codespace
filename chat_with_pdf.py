@@ -1,46 +1,152 @@
-import streamlit as st
 import os
-from openai import OpenAI
+import streamlit as st
 from os import environ
+from openai import OpenAI
+# --- LangChain & OpenAI Imports ---
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.document_loaders import TextLoader, PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
 
+# -----------------------------
+# 🔧 Environment Configuration
+# -----------------------------
 client = OpenAI(
-	api_key=os.environ["API_KEY"],
+	api_key="sk-nsjrhU0f3oKGYC9VWee1_g",
 	base_url="https://api.ai.it.cornell.edu",
 )
 
-st.title("📝 File Q&A with OpenAI")
-uploaded_file = st.file_uploader("Upload an article", type=("txt", "md"))
+environ['OPENAI_API_KEY'] = "sk-nsjrhU0f3oKGYC9VWee1_g"
+environ['OPENAI_BASE_URL'] = 'https://api.ai.it.cornell.edu'
 
-question = st.chat_input(
-    "Ask something about the article",
-    disabled=not uploaded_file,
+# Initialize the LLM
+llm = ChatOpenAI(
+    model="openai.gpt-4o",
+    temperature=0.2,
 )
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "Ask something about the article"}]
+# -----------------------------
+# 🌟 Streamlit UI
+# -----------------------------
+st.title("🧠 File Q&A with Custom RAG (LangChain + Chroma)")
+st.caption("Upload `.txt` or `.pdf` files and chat with their content using a retrieval-augmented generation (RAG) pipeline.")
 
+# File upload
+uploaded_files = st.file_uploader(
+    "Upload your documents",
+    type=("txt", "pdf"),
+    accept_multiple_files=True
+)
+
+# -----------------------------
+# 🧩 Session State Initialization
+# -----------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hi 👋! Upload one or more documents and ask me questions about them."}
+    ]
+if "vectorstore" not in st.session_state:
+    st.session_state.vectorstore = None
+
+# -----------------------------
+# 📄 Document Ingestion & Chunking
+# -----------------------------
+def process_files(files):
+    docs = []
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=0)
+    os.makedirs("uploaded_docs", exist_ok=True)
+
+    for f in files:
+        file_path = os.path.join("uploaded_docs", f.name)
+        with open(file_path, "wb") as tmp:
+            tmp.write(f.getbuffer())
+
+        # Load based on file type
+        if f.name.endswith(".txt"):
+            loader = TextLoader(file_path)
+        elif f.name.endswith(".pdf"):
+            loader = PyPDFLoader(file_path)
+        else:
+            st.warning(f"Unsupported file type: {f.name}")
+            continue
+
+        documents = loader.load()
+        split_docs = text_splitter.split_documents(documents)
+        docs.extend(split_docs)
+
+    # Create embeddings & store vectors
+    embeddings=OpenAIEmbeddings(model="openai.text-embedding-3-large")
+    vectorstore = Chroma.from_documents(documents=docs, embedding=embeddings)
+    return vectorstore
+
+# Process uploaded files
+if uploaded_files:
+    with st.spinner("🔍 Processing and embedding your documents..."):
+        st.session_state.vectorstore = process_files(uploaded_files)
+    st.success("✅ Documents uploaded and indexed successfully!")
+
+# -----------------------------
+# 💬 Chat Display
+# -----------------------------
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-if question and uploaded_file:
-    # Read the content of the uploaded file
-    file_content = uploaded_file.read().decode("utf-8")
-    print(file_content)
+# -----------------------------
+# 🧠 Chat Input & RAG Workflow
+# -----------------------------
+question = st.chat_input("Ask a question about your uploaded documents", disabled=not st.session_state.vectorstore)
 
-    # Append the user's question to the messages
+def format_docs(docs):
+    return "\n\n---\n\n".join(d.page_content for d in docs)
+
+if question and st.session_state.vectorstore:
+    # Display user question
     st.session_state.messages.append({"role": "user", "content": question})
     st.chat_message("user").write(question)
 
     with st.chat_message("assistant"):
-        stream = client.chat.completions.create(
-            model="gpt-4o",  # Change this to a valid model name
-            messages=[
-                {"role": "system", "content": f"Here's the content of the file:\n\n{file_content}"},
-                *st.session_state.messages
-            ],
-            stream=True
-        )
-        response = st.write_stream(stream)
+        with st.spinner("Retrieving relevant chunks and generating answer..."):
+            # 1️⃣ Retrieve
+            docs = st.session_state.vectorstore.similarity_search(question, k=5)
+            context = format_docs(docs)
 
-    # Append the assistant's response to the messages
-    st.session_state.messages.append({"role": "assistant", "content": response})
+            # 2️⃣ Build prompt
+            template = """
+            You are an assistant for question-answering tasks.
+            Use the following pieces of retrieved context to answer the question.
+            If you don't know the answer, just say that you don't know.
+            Use three sentences maximum and keep the answer concise.
+
+            Question: {question}
+
+            Context: {context}
+
+            Answer:
+            """
+            prompt = PromptTemplate.from_template(template)
+            system_instructions = (
+                "You are a helpful assistant for question answering.\n"
+                "Use ONLY the provided context to answer concisely (<=3 sentences).\n"
+                "If the answer isn't in the context, say you don't know.\n\n"
+                f"Context:\n{context}"
+            )
+
+            # 3️⃣ Ask the model
+            response = llm.invoke([
+                SystemMessage(content=system_instructions),
+                HumanMessage(content=question),
+            ])
+
+            # 4️⃣ Show answer
+            st.write(response.content)
+
+            # Optional: Sources
+            with st.expander("📚 Sources"):
+                for i, d in enumerate(docs, 1):
+                    src = d.metadata.get("source", "(no source)")
+                    st.markdown(f"[{i}] **{src}** — {d.page_content[:200]}...")
+
+    # Append assistant reply
+    st.session_state.messages.append({"role": "assistant", "content": response.content})
