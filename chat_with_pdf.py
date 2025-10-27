@@ -14,20 +14,14 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # -----------------------------
 # 🔧 Environment Configuration
 # -----------------------------
-api_key = ""
-client = OpenAI(
-	api_key=api_key,
-	base_url="https://api.ai.it.cornell.edu",
-)
 
-environ['OPENAI_API_KEY'] = api_key
-environ['OPENAI_BASE_URL'] = 'https://api.ai.it.cornell.edu'
 
 # Initialize the LLM
 llm = ChatOpenAI(
     model="openai.gpt-4o",
     temperature=0.2,
 )
+st.markdown('<style>body{background-color:powderblue;}</style>',unsafe_allow_html=True)
 
 # -----------------------------
 # 🌟 Streamlit UI
