@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 from os import environ
 from openai import OpenAI
@@ -13,12 +14,13 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # -----------------------------
 # 🔧 Environment Configuration
 # -----------------------------
+api_key = ""
 client = OpenAI(
-	api_key="sk-nsjrhU0f3oKGYC9VWee1_g",
+	api_key=api_key,
 	base_url="https://api.ai.it.cornell.edu",
 )
 
-environ['OPENAI_API_KEY'] = "sk-nsjrhU0f3oKGYC9VWee1_g"
+environ['OPENAI_API_KEY'] = api_key
 environ['OPENAI_BASE_URL'] = 'https://api.ai.it.cornell.edu'
 
 # Initialize the LLM
@@ -30,7 +32,8 @@ llm = ChatOpenAI(
 # -----------------------------
 # 🌟 Streamlit UI
 # -----------------------------
-st.title("🧠 File Q&A with Custom RAG (LangChain + Chroma)")
+success_placeholder = st.empty()
+st.title("🧠 File Q&A with Custom RAG")
 st.caption("Upload `.txt` or `.pdf` files and chat with their content using a retrieval-augmented generation (RAG) pipeline.")
 
 # File upload
@@ -39,6 +42,22 @@ uploaded_files = st.file_uploader(
     type=("txt", "pdf"),
     accept_multiple_files=True
 )
+
+if st.button("🗑 Clear All Documents"):
+    if "vectorstore" in st.session_state:
+        st.session_state.vectorstore = None
+    if "messages" in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "content": "All documents have been cleared. Upload new files to start again."}
+        ]
+    # Optionally remove uploaded files from disk
+    if os.path.exists("uploaded_docs"):
+        import shutil
+        shutil.rmtree("uploaded_docs")
+    os.makedirs("uploaded_docs", exist_ok=True)
+    success_placeholder.success("✅ All uploaded files and embeddings have been removed.")
+    time.sleep(2)
+    success_placeholder.empty()
 
 # -----------------------------
 # 🧩 Session State Initialization
@@ -75,6 +94,7 @@ def process_files(files):
         documents = loader.load()
         split_docs = text_splitter.split_documents(documents)
         docs.extend(split_docs)
+    
 
     # Create embeddings & store vectors
     embeddings=OpenAIEmbeddings(model="openai.text-embedding-3-large")
@@ -85,16 +105,21 @@ def process_files(files):
 if uploaded_files:
     with st.spinner("🔍 Processing and embedding your documents..."):
         st.session_state.vectorstore = process_files(uploaded_files)
-    st.success("✅ Documents uploaded and indexed successfully!")
+    success_placeholder.success("✅ Documents uploaded and indexed successfully!")
+    time.sleep(2)
+    success_placeholder.empty()
+    st.session_state.clear_uploader = True
+    # st.rerun()
+
 
 # -----------------------------
-# 💬 Chat Display
+# Chat Display
 # -----------------------------
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 # -----------------------------
-# 🧠 Chat Input & RAG Workflow
+# Chat Input & RAG Workflow
 # -----------------------------
 question = st.chat_input("Ask a question about your uploaded documents", disabled=not st.session_state.vectorstore)
 
@@ -108,11 +133,11 @@ if question and st.session_state.vectorstore:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving relevant chunks and generating answer..."):
-            # 1️⃣ Retrieve
+            # Retrieve
             docs = st.session_state.vectorstore.similarity_search(question, k=5)
             context = format_docs(docs)
 
-            # 2️⃣ Build prompt
+            # Build prompt
             template = """
             You are an assistant for question-answering tasks.
             Use the following pieces of retrieved context to answer the question.
@@ -133,13 +158,13 @@ if question and st.session_state.vectorstore:
                 f"Context:\n{context}"
             )
 
-            # 3️⃣ Ask the model
+            # Ask the model
             response = llm.invoke([
                 SystemMessage(content=system_instructions),
                 HumanMessage(content=question),
             ])
 
-            # 4️⃣ Show answer
+            # Show answer
             st.write(response.content)
 
             # Optional: Sources
