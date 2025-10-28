@@ -21,14 +21,44 @@ llm = ChatOpenAI(
     model="openai.gpt-4o",
     temperature=0.2,
 )
-st.markdown('<style>body{background-color:powderblue;}</style>',unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    /* Main app background */
+    [data-testid="stAppViewContainer"] {
+        background-color: powderblue;
+    }
+
+    /* Sidebar background */
+    [data-testid="stSidebar"] {
+        background-color: lightgray;
+    }
+
+    /* Header (top bar) */
+    [data-testid="stHeader"] {
+        background-color: powderblue;
+    }
+
+    /* Footer (bottom bar) */
+    footer { 
+        background-color: powderblue;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    [data-testid="stApp"] {
+        background-color: powderblue;
+    }
+    </style>
+    """,unsafe_allow_html=True)
 
 # -----------------------------
 # 🌟 Streamlit UI
 # -----------------------------
 success_placeholder = st.empty()
 st.title("🧠 File Q&A with Custom RAG")
-st.caption("Upload `.txt` or `.pdf` files and chat with their content using a retrieval-augmented generation (RAG) pipeline.")
 
 # File upload
 uploaded_files = st.file_uploader(
