@@ -26,7 +26,7 @@ st.markdown("""
     <style>
     /* Main app background */
     [data-testid="stAppViewContainer"] {
-        background-color: powderblue;
+        background-color: #FFF3E0;
     }
 
     /* Sidebar background */
@@ -36,12 +36,12 @@ st.markdown("""
 
     /* Header (top bar) */
     [data-testid="stHeader"] {
-        background-color: powderblue;
+        background-color: #FFF3E0;
     }
 
     /* Footer (bottom bar) */
     footer { 
-        background-color: powderblue;
+        background-color: #FFF3E0;
     }
     </style>
 """, unsafe_allow_html=True)
