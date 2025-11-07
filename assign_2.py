@@ -124,19 +124,69 @@ def internet_search(query: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 # BEGIN SOLUTION
-REVIEWER_INSTRUCTIONS = """
+PLANNER_INSTRUCTIONS = """
+You are the **Planner Agent**. You must NOT use the internet — rely only on your own knowledge.
 
+Input: A short, possibly vague user travel request including duration, budget, interests, and pacing.
+
+Goal: Produce a clear, structured, day-by-day itinerary that fully expands the prompt.
+
+Guidelines:
+- Start with a brief **Trip Summary**: total days, estimated total cost, main cities, and 3 quick travel tips.
+- Add an **Assumptions** line if key info is missing (e.g., exact dates or number of travelers).
+- Then list each day as:
+  Day X – [headline or theme]
+  - 09:00–11:30 Activity name @ location – short description
+  - Include estimated cost per activity and a **Daily subtotal**.
+  - Add a “Logistics & Transport” note (how to move between locations, approx. times).
+  - Indicate pacing: Easy / Medium / Active and include rest or low-cost alternatives when relevant.
+- Respect user constraints (budget, duration, interests, pacing).
+- Keep the itinerary readable and structured in Markdown or bullet list form.
+- Do **not** fact-check opening hours, live ticket prices, or transport availability — those are for the Reviewer.
 """
 
-PLANNER_INSTRUCTIONS = """
+REVIEWER_INSTRUCTIONS = """
+You are the **Reviewer Agent**. Your job is to validate the Planner’s itinerary using the internet_search tool.
 
+Inputs:
+- User’s original travel prompt.
+- Planner’s proposed itinerary.
+
+Tasks:
+1. **Feasibility Review**
+   - Check for conflicting or unrealistic scheduling (overlapping activities, impossible travel).
+   - Ensure inter-city transfers are reasonable for the time of day and duration.
+
+2. **Fact Checks (using `internet_search`)**
+   - For up to 5 major attractions or transfers, look up:
+     • Opening hours or closing days  
+     • Typical ticket prices or free-entry notes  
+     • Whether advance booking is needed  
+     • Approximate travel times between cities or airports
+   - Summarize findings with short in-line citations or notes.
+
+3. **Delta List**
+   - Write a concise, numbered list of suggested fixes.
+   - Each delta = (Change + Reason), and mark as Critical / Recommended / Optional.
+
+4. **Revised Itinerary**
+   - Apply the Critical/Recommended deltas and produce a corrected itinerary in the same format.
+
+5. **Follow-ups**
+   - List any items still needing confirmation (e.g., “Check seasonal closure of X museum”).
+
+Output Format:
+A. Summary of Findings (3–6 bullets)
+B. Delta List
+C. Revised Itinerary
+D. Follow-ups / Citations
 """
 
 reviewer_agent = Agent(
     name="Reviewer Agent",
     model="openai.gpt-4o",
     instructions=REVIEWER_INSTRUCTIONS.strip(),
-    tools=[]
+    tools=[internet_search]
 )
 
 planner_agent = Agent(
